@@ -1,0 +1,62 @@
+{
+  "name": "dsh-safety-inspector",
+  "version": "1.0.0",
+  "description": "安全巡检：只读审计 DSH 会话的行为安全，按 A–H 分类给出带事件锚点的发现、深链倒查与单条回答的完整调用链。",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/reader.js",
+    "lib/model.js",
+    "lib/rules.js",
+    "lib/taxonomy.js",
+    "lib/store.js",
+    "lib/report.js",
+    "lib/thresholds.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "safety",
+    "audit",
+    "observability",
+    "agent-security"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-chat"
+      ],
+      "platform": "web"
+    },
+    "manifestVersion": 1
+  },
+  "license": "MIT"
+}

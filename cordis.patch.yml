@@ -1,0 +1,5 @@
+# Bundle patch layer: load this package's host entry as a Cordis plugin. The
+# `dsh.client` declaration makes the web app load ./client.js as the browser half.
+- insert:
+    - id: safety-inspector
+      name: dsh-safety-inspector
