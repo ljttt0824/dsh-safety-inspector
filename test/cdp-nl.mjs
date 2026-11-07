@@ -1,16 +1,15 @@
-// Browser checks for the plain-language layer, failure affordance and the
-// opt-in AI button. Usage: node test/cdp-nl.mjs <appUrl> <token> <cdpBase> <sessionId>
+// Plain-language checks, now against the answer overlay (the panel no longer
+// carries a per-turn chain). Usage:
+//   node test/cdp-nl.mjs <appUrl> <token> <cdpBase> <sessionId>
 const [appUrl, token, cdpBase = 'http://127.0.0.1:9333', sessionId = '8aa373c4-264d-4d23-9afe-c8b37d4a39d4'] = process.argv.slice(2)
-const apiBase = appUrl.replace(/\/\?.*$/, '')
+const apiBase = appUrl.split('?')[0].replace(/\/$/, '')
 const headers = { authorization: `Bearer ${token}` }
 
-const chainRes = await (await fetch(`${apiBase}/api/agent-safety/chain?sessionId=${encodeURIComponent(sessionId)}`, { headers })).json()
-const chain = chainRes.chain
+const chain = (await (await fetch(`${apiBase}/api/agent-safety/chain?sessionId=${encodeURIComponent(sessionId)}`, { headers })).json()).chain
 const failTurn = chain.turns.find((turn) => (turn.calls || []).some((call) => call.isError === true))
 if (!failTurn) throw new Error('no failing call in this session')
 const failCall = failTurn.calls.find((call) => call.isError === true)
-const failSteps = chain.turns.filter((turn) => (turn.calls || []).some((call) => call.isError === true)).length
-console.log(`fixture: T${failTurn.turn} failStep=S${failCall.step} ${failCall.name} · failing steps=${failSteps}`)
+console.log(`fixture: T${failTurn.turn} failStep=S${failCall.step} ${failCall.name}`)
 
 const targets = await (await fetch(cdpBase + '/json/list')).json()
 const page = targets.find((t) => t.type === 'page')
@@ -56,81 +55,54 @@ await send('Runtime.enable')
 await send('Page.navigate', { url: appUrl })
 await waitFor("document.querySelector('style[data-plugin=\"dsh-safety-inspector\"]') !== null", 30000)
 
-// open panel on the target session
-await evaluate(`(() => {
-  const nodes = [...document.querySelectorAll('button,[role="button"],a')];
-  const hit = nodes.find((n) => (n.getAttribute('aria-label') || n.textContent || '').trim() === '安全巡检' && n.offsetParent !== null);
-  if (hit) hit.click(); return true;
-})()`)
-await waitFor("document.querySelectorAll('.sf-srow').length > 0", 25000)
-await evaluate(`(() => {
-  const rows = [...document.querySelectorAll('.sf-srow')];
-  const hit = rows.find((r) => r.textContent.replace(/\\s/g, '').toLowerCase().includes('${sessionId.slice(0, 8)}'));
-  if (hit) hit.click(); return true;
-})()`)
-await waitFor("document.querySelectorAll('.sf-bar').length > 0", 25000)
-await evaluate(`(() => { const tab = [...document.querySelectorAll('.sf-tab')].find((n) => n.textContent.includes('执行链')); if (tab) tab.click(); return true })()`)
-await waitFor("document.querySelectorAll('.sf-step').length > 0", 25000)
+await evaluate(`(() => { location.hash = '#safety?session=${sessionId}&turn=${failTurn.turn}'; window.dispatchEvent(new HashChangeEvent('hashchange')); return true })()`)
+await waitFor("document.querySelector('.sf-overlay .sf-drawer') !== null", 20000)
+await waitFor("document.querySelectorAll('.sf-overlay .sf-drawer .sf-card').length > 1", 25000)
 
-// 1. steps carry a plain-language headline instead of a tool list
-const stepText = await evaluate(`(() => {
-  const step = document.querySelector('.sf-step.on') || document.querySelector('.sf-step');
-  const head = step.querySelector('.hd') ? step.querySelector('.hd').innerText : '';
-  const tail = step.querySelector('.tl') ? step.querySelector('.tl').innerText : '';
-  return JSON.stringify({ head, tail });
+const text = await evaluate("document.querySelector('.sf-overlay .sf-drawer .body').innerText")
+check('请求 / 结果 用自然语言', text.includes('请求') && text.includes('结果') && !text.includes('{"command"'), text.replace(/\n/g, ' ⏎ ').slice(0, 150))
+check('访问的数据可见', text.includes('访问的数据'), '')
+check('风险判定可见', text.includes('风险判定'), '')
+
+const failedChip = await evaluate(`(() => {
+  const chip = [...document.querySelectorAll('.sf-overlay .sf-drawer .sf-btn')].find((b) => b.textContent.includes('✕'));
+  return chip ? JSON.stringify({ text: chip.textContent.trim(), border: chip.style.borderColor }) : '';
 })()`)
-const parsedStep = JSON.parse(stepText)
-check('步骤显示自然语言摘要', /读|执行|写|访问|搜索|列/.test(parsedStep.tail) && !/^[\w-]+( [\w-]+)*$/.test(parsedStep.tail.trim()), parsedStep.tail.slice(0, 60))
+const failState = failedChip === '' ? { text: '', border: '' } : JSON.parse(failedChip)
+check('失败调用用红色标出', failState.text !== '' && /e5484d|229, 72, 77/.test(failState.border), `${failState.text} ${failState.border}`)
 
-// 2. the failing step is marked
-const failMark = await evaluate(`(() => {
-  const badges = [...document.querySelectorAll('.sf-badge-fail')];
-  return JSON.stringify({ count: badges.length, text: badges[0] ? badges[0].textContent : '' });
-})()`)
-const failState = JSON.parse(failMark)
-check('失败的那一步有标记', failState.count > 0 && failState.text.includes('失败'), `${failState.count} 处`)
-
-// 3. only-failed filter jumps to it
-await evaluate(`(() => { const btn = [...document.querySelectorAll('.sf-btn')].find((b) => b.textContent.includes('只看失败')); if (btn) btn.click(); return true })()`)
-await new Promise((resolve) => setTimeout(resolve, 500))
-const filtered = await evaluate("document.querySelectorAll('.sf-step').length")
-check('只看失败可过滤', filtered === failSteps, filtered + ' 步 / 期望 ' + failSteps)
-
-// 4. inspector shows request/result/risk in words, and raw is available
-const inspector = JSON.parse(await evaluate(`(() => {
-  const el = document.querySelector('.sf-insp');
-  const text = el ? el.innerText : '';
-  return JSON.stringify({ text: text.slice(0, 700), hasRisk: /风险判定/.test(text), hasRawToggle: /看原始数据/.test(text) });
-})()`))
-check('Inspector 用通俗语言', inspector.hasRisk === true && /访问的数据/.test(inspector.text), '')
-console.log('   inspector:', inspector.text.replace(/\n/g, ' ⏎ ').slice(0, 320))
+const failureRow = await evaluate("(document.querySelector('.sf-overlay .sf-drawer .body').innerText.match(/失败的那一步[^\\n]*/) || [''])[0]")
+check('有「失败的那一步」快捷入口', failureRow.includes('失败的那一步'), failureRow.slice(0, 60))
 
 const toggled = await evaluate(`(() => {
-  const btn = [...document.querySelectorAll('.sf-insp .sf-btn')].find((b) => b.textContent.includes('看原始数据'));
+  const btn = [...document.querySelectorAll('.sf-overlay .sf-drawer .sf-btn')].find((b) => b.textContent.includes('看原始数据'));
   if (!btn) return false;
   btn.click();
   return true;
 })()`)
-await new Promise((resolve) => setTimeout(resolve, 400))
-const rawShown = await evaluate("document.querySelectorAll('.sf-insp .sf-code-box').length")
+await new Promise((resolve) => setTimeout(resolve, 500))
+const rawShown = await evaluate("document.querySelectorAll('.sf-overlay .sf-drawer .sf-code-box').length")
 check('可切换看原始数据', toggled === true && rawShown > 0, rawShown + ' 个代码块')
 
-// 5. AI button exists and is opt-in
 const aiButton = await evaluate(`(() => {
-  const btn = [...document.querySelectorAll('.sf-btn')].find((b) => b.textContent.includes('AI 详细分析'));
-  return btn ? btn.textContent : '';
+  const btn = [...document.querySelectorAll('.sf-overlay .sf-drawer .sf-btn')].find((b) => b.textContent.includes('AI 详细分析'));
+  return btn ? btn.textContent.trim() : '';
 })()`)
-check('AI 分析按钮存在且标注消耗 token', aiButton.includes('消耗 token'), aiButton)
+check('AI 按钮标注消耗 token', aiButton.includes('消耗 token'), aiButton)
 
-await evaluate(`(() => { const btn = [...document.querySelectorAll('.sf-btn')].find((b) => b.textContent.includes('AI 详细分析')); if (btn) btn.click(); return true })()`)
+await evaluate(`(() => {
+  const btn = [...document.querySelectorAll('.sf-overlay .sf-drawer .sf-btn')].find((b) => b.textContent.includes('AI 详细分析'));
+  if (btn) btn.click();
+  return true;
+})()`)
 let analysisShown = false
 try {
-  analysisShown = await waitFor("document.querySelector('.sf-insp').innerText.includes('本次消耗')", 40000)
+  analysisShown = await waitFor("document.querySelector('.sf-overlay .sf-drawer').innerText.includes('本次消耗')", 45000)
 } catch { analysisShown = false }
-const analysisText = analysisShown
-  ? await evaluate("(document.querySelector('.sf-insp').innerText.match(/本次消耗[^\\n]*/) || [''])[0]")
+const usage = analysisShown
+  ? await evaluate("(document.querySelector('.sf-overlay .sf-drawer').innerText.match(/本次消耗[^\\n]*/) || [''])[0]")
   : ''
-check('点击后展示 AI 分析与 token 用量', analysisShown === true, analysisText)
+check('点击后展示 AI 分析与 token 用量', analysisShown === true, usage)
 
 const failed = results.filter((row) => row.ok !== true)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
