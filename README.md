@@ -1,5 +1,7 @@
 # dsh-safety-inspector · 安全巡检
 
+[![GitHub](https://img.shields.io/badge/GitHub-ljttt0824%2Fdsh--safety--inspector-24292f)](https://github.com/ljttt0824/dsh-safety-inspector)
+
 只读的 **DSH 会话行为安全审计**插件：读会话事件流，判定这次会话里发生过哪些不安全行为、属于哪一类、严重度多少、证据在哪个事件，并给出可倒查的深链和单条回答的完整调用链。
 
 - **只读**：不写会话文件、不改会话状态、不执行被审计内容、不发任何网络请求、默认不调 LLM。
