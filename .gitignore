@@ -4,3 +4,7 @@
 edge-profile/
 data/
 *.tgz
+probe-*.mjs
+*.json
+!package.json
+!taxonomy.json
