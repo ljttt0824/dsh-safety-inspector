@@ -1,6 +1,6 @@
 {
   "name": "dsh-safety-inspector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "安全巡检：只读审计 DSH 会话的行为安全，按 A–H 分类给出带事件锚点的发现、深链倒查与单条回答的完整调用链。",
   "type": "module",
   "main": "lib/index.js",
