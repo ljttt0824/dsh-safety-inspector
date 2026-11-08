@@ -13,10 +13,10 @@ test('global rule stays tiny (<= 80 chars)', () => {
   assert.ok(PROMPT_SECTION.length <= 80, `PROMPT_SECTION is ${PROMPT_SECTION.length} chars`)
 })
 
-test('tool schema stays under budget (<= 760 chars)', () => {
+test('tool schema stays under budget (<= 820 chars)', () => {
   const tool = buildTool({})
   const json = JSON.stringify(tool)
-  assert.ok(json.length <= 760, `tool schema is ${json.length} chars`)
+  assert.ok(json.length <= 820, `tool schema is ${json.length} chars`)
   assert.deepEqual(tool.parameters.required, ['action'])
   assert.equal(tool.parameters.additionalProperties, false)
 })

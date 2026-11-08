@@ -8,6 +8,7 @@ import { normalizeSession } from '../lib/model.js'
 import { createRules, runRules } from '../lib/rules.js'
 import { buildReport } from '../lib/report.js'
 import { loadTaxonomy } from '../lib/taxonomy.js'
+import { buildLedger } from '../lib/ledger.js'
 import { DEFAULT_THRESHOLDS } from '../lib/thresholds.js'
 
 const SESSION = { type: 'session', id: 'session-test-1', cwd: 'C:\\work', createdAt: 1700000000000, agentPreset: 'standard' }
@@ -184,12 +185,14 @@ test('report keeps coverage honest and marks missing taxonomy', async () => {
   const missing = await loadTaxonomy('Z:\\does-not-exist\\taxonomy.json')
   assert.equal(missing.fallback, true)
   assert.equal(missing.missing, true)
+  const ledger = buildLedger(missing, results, findings)
   const report = buildReport({
     model,
     findings,
     ruleResults: results,
     loadedTax: missing,
     labels: [],
+    ledger,
     findingId: (sid, rule, seq, callId) => `${rule}:${seq}:${callId}`,
   })
   assert.equal(report.coverage.state, 'incomplete')

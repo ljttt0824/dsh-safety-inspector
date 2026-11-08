@@ -92,11 +92,31 @@ const grouped = JSON.parse(await evaluate(`(() => {
   return JSON.stringify({
     tab: on ? on.textContent.trim() : '',
     rows: document.querySelectorAll('.sf-finding').length,
-    groups: [...document.querySelectorAll('.sf-view b')].map((n) => n.textContent).filter((t) => ['严重', '高', '中', '低', '提示'].includes(t)),
+    verdicts: [...document.querySelectorAll('.sf-view b')].map((n) => n.textContent).filter((t) => ['已确认', '待验证', '已排除'].includes(t)),
+    segments: [...document.querySelectorAll('.sf-seg button')].map((n) => n.textContent.trim()),
   });
 })()`))
-check('点「严重」进入分组风险清单', opened === true && grouped.tab.includes('风险清单') && grouped.rows > 0, `tab=${grouped.tab} rows=${grouped.rows} groups=${grouped.groups.join(',')}`)
-check('清单按严重度分组', grouped.groups.length >= 1, grouped.groups.join(' / '))
+check('点「严重」进入分组风险清单', opened === true && grouped.tab.includes('风险清单') && grouped.rows > 0, `tab=${grouped.tab} rows=${grouped.rows}`)
+check('清单按判定分组', grouped.verdicts.length >= 1, grouped.verdicts.join(' / '))
+check('有判定筛选', grouped.segments.some((t) => t.startsWith('已确认')) && grouped.segments.some((t) => t.startsWith('待验证')), grouped.segments.join(' / '))
+
+// 3b — coverage ledger and markdown export live on the overview tab
+await evaluate(`(() => { const tab = [...document.querySelectorAll('.sf-tab')].find((n) => n.textContent.includes('总览')); if (tab) tab.click(); return true })()`)
+await waitFor("document.querySelectorAll('.sf-bar').length > 0", 20000)
+await new Promise((resolve) => setTimeout(resolve, 300))
+const ledger = await evaluate(`(() => {
+  const cards = [...document.querySelectorAll('.sf-card')];
+  const card = cards.find((c) => c.innerText.startsWith('覆盖台账'));
+  if (!card) return '';
+  return card.innerText.split(String.fromCharCode(10)).join(' ').slice(0, 140);
+})()`)
+check('覆盖台账按四态展示', ledger.includes('已覆盖') && ledger.includes('未覆盖'), ledger)
+
+const mdButton = await evaluate(`(() => {
+  const btn = [...document.querySelectorAll('.sf-btn')].find((b) => b.textContent.includes('导出 Markdown'));
+  return btn ? btn.textContent.trim() : '';
+})()`)
+check('可导出 Markdown 报告', mdButton.length > 0, mdButton)
 
 // 4 — colour-coded steps in the answer overlay
 const turnLink = apiBase + '/#safety?session=' + encodeURIComponent(sessionId) + '&turn=' + busyTurn.turn

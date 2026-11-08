@@ -91,8 +91,8 @@ let current = null
     await call('/label', { method: 'POST', body: JSON.stringify({ findingId: c1.id, mark: 'benign' }) })
     const body = await call('/session?sessionId=47cd3ca7-e607-4f13-b2b7-4a8505419648&force=1')
     const again = body.report.findings.find((row) => row.id === c1.id)
-    check('7 标记误报后降级', again !== undefined && again.state === 'benign' && again.severity === 'info',
-      again ? `${c1.severity} -> ${again.severity} / ${again.state}` : '未找到')
+    check('7 标记误报后降级', again !== undefined && again.verdict === 'rejected' && again.severity === null,
+      again ? `${c1.verdict} -> ${again.verdict} / severity ${again.severity} / ${again.rejectReason ?? ''}` : '未找到')
     const sameRule = body.report.findings.filter((row) => row.feature === c1.feature && row.state !== 'benign' && row.id !== c1.id)
     check('7b 同特征不再计违规', sameRule.length === 0, `${sameRule.length} 条同特征仍在 violation`)
   }
